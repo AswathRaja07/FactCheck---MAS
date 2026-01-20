@@ -124,8 +124,8 @@ pip install -r requirements.txt
 ### Step 2: Configure Qdrant
 Edit `config.py` with your Qdrant credentials:
 ```python
-QDRANT_URL = "your-qdrant-url"
-QDRANT_API_KEY = "your-api-key"
+QDRANT_URL = "https://19f65b30-a9ee-4dfe-a464-7ab559058c66.us-east4-0.gcp.cloud.qdrant.io"
+QDRANT_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.Ztu4BNYjv1d3ad1IMu_HfoBDdMKGqC3lkVw_0v3XRng"
 COLLECTION_NAME = "verified_facts_text"
 ```
 
