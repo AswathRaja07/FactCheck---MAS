@@ -125,7 +125,7 @@ pip install -r requirements.txt
 Edit `config.py` with your Qdrant credentials:
 ```python
 QDRANT_URL = "https://19f65b30-a9ee-4dfe-a464-7ab559058c66.us-east4-0.gcp.cloud.qdrant.io"
-QDRANT_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.Ztu4BNYjv1d3ad1IMu_HfoBDdMKGqC3lkVw_0v3XRng"
+QDRANT_API_KEY = "***"
 COLLECTION_NAME = "verified_facts_text"
 ```
 
@@ -303,7 +303,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **🧠 SentenceTransformers** for embedding models
 - **🌐 Streamlit** for the web framework
 - **🏆 Convolve 4.0** for the MAS Track challenge
-
----
-
-**Built with ❤️ for Convolve 4.0 MAS Track**
