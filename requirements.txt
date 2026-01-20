@@ -1,0 +1,8 @@
+streamlit
+sentence-transformers
+torch
+qdrant-client
+pandas
+numpy
+matplotlib
+requests
