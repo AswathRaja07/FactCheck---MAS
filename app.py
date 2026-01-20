@@ -1,124 +1,121 @@
 import streamlit as st
-import matplotlib.pyplot as plt
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
+from qdrant_client.http.models import SearchRequest
+import numpy as np
+import matplotlib.pyplot as plt
 
-from agents import (
-    ClaimNormalizationAgent,
-    EmbeddingAgent,
-    EvidenceRetrievalAgent,
-    VerdictAgent
-)
-from config import QDRANT_URL, QDRANT_API_KEY, COLLECTION_NAME
+# =========================
+# APP HEADER
+# =========================
+st.set_page_config(page_title="FactCheckAI", layout="centered")
 
+st.markdown("""
+<h1 style='text-align:center; color:#4da6ff;'>🛡️ FactCheckAI</h1>
+<p style='text-align:center;'>AI-powered fact verification using real fact-check evidence</p>
+""", unsafe_allow_html=True)
 
-# ============================
-# LOAD MODELS & CLIENT
-# ============================
-
+# =========================
+# LOAD MODEL (CPU SAFE)
+# =========================
 @st.cache_resource
 def load_model():
-    return SentenceTransformer("all-MiniLM-L6-v2")
-
-@st.cache_resource
-def load_client():
-    return QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    return model
 
 model = load_model()
-client = load_client()
+
+# =========================
+# CONNECT TO QDRANT
+# =========================
+QDRANT_URL = "https://19f65b30-a9ee-4dfe-a464-7ab559058c66.us-east4-0.gcp.cloud.qdrant.io"
+QDRANT_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.4CzqMS8FHJfFp0vdTRdpP2ewarxdKfdLw5MFFYvggDM"
+
+client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+
+COLLECTION = "verified_facts_text"
+TOP_K = 3
 
 
-# ============================
-# AGENT INITIALIZATION
-# ============================
-
-normalize_agent = ClaimNormalizationAgent()
-embed_agent = EmbeddingAgent(model)
-retrieve_agent = EvidenceRetrievalAgent(client, COLLECTION_NAME)
-verdict_agent = VerdictAgent()
-
-
-# ============================
-# STREAMLIT UI
-# ============================
-
-st.set_page_config(
-    page_title="MAS Fact Check System",
-    page_icon="🛡️",
-    layout="wide"
-)
-
-st.title("🛡️ Multi-Agent Fact Verification System (MAS + Qdrant)")
-st.write("Enter a claim below and the system will analyze it using semantic evidence retrieval & reasoning.")
-
-claim = st.text_input("Enter a claim:", placeholder="e.g., COVID vaccines cause infertility")
+# =========================
+# RETRIEVAL FUNCTION
+# =========================
+def retrieve(claim):
+    vec = model.encode(claim).tolist()
+    
+    results = client.search(
+        collection_name=COLLECTION,
+        query_vector=vec,
+        limit=TOP_K
+    )
+    
+    return results
 
 
-# ============================
-# MAIN EXECUTION BLOCK
-# ============================
+# =========================
+# VERDICT LOGIC
+# =========================
+def get_verdict(results):
+    deb = sum(1 for r in results if r.payload.get("status") == "debunked")
+    ver = sum(1 for r in results if r.payload.get("status") == "verified")
 
-if st.button("Verify Claim"):
-
-    if claim.strip() == "":
-        st.warning("⚠ Please enter a claim to verify.")
+    if ver > deb:
+        return "verified", ver, deb
     else:
-        with st.spinner("Analyzing via multi-agent pipeline..."):
+        return "debunked", ver, deb
 
-            # STEP 1 — Normalization
-            normalized = normalize_agent.run(claim)
 
-            # STEP 2 — Embedding
-            vector = embed_agent.run(normalized)
+# =========================
+# UI INPUT
+# =========================
+claim = st.text_input("Enter a factual claim to verify:")
 
-            # STEP 3 — Evidence Retrieval
-            evidence_points = retrieve_agent.run(vector)
+if st.button("Verify"):
+    if claim.strip() == "":
+        st.warning("Please enter a claim.")
+    else:
+        with st.spinner("Checking evidence..."):
+            results = retrieve(claim)
 
-            if len(evidence_points) == 0:
-                st.error("❌ No relevant evidence found in the vector database.")
-            else:
-                # STEP 4 — Verdict Computation
-                verdict, confidence, filtered = verdict_agent.run(evidence_points)
+        if len(results) == 0:
+            st.error("No matching evidence found.")
+        else:
+            verdict, ver_count, deb_count = get_verdict(results)
 
-                # ============================
-                # SHOW VERDICT + CONFIDENCE
-                # ============================
+            # =========================
+            # SHOW VERDICT
+            # =========================
+            color = "green" if verdict == "verified" else "red"
+            st.markdown(f"""
+            <h2>Verdict: <span style='color:{color}; text-transform:capitalize;'>{verdict}</span></h2>
+            """, unsafe_allow_html=True)
 
-                verdict_map = {
-                    "verified": "✔ VERIFIED (Supported by Evidence)",
-                    "debunked": "❌ DEBUNKED (Contradicted by Evidence)",
-                    "unknown": "❓ UNKNOWN (Insufficient Evidence)"
-                }
+            # =========================
+            # PIE CHART (SMALL)
+            # =========================
+            labels = ['Verified', 'Debunked']
+            values = [ver_count, deb_count]
+            colors = ['#4CAF50', '#E74C3C']  # green/red
 
-                st.subheader("Final Verdict")
-                st.markdown(f"### {verdict_map[verdict]}")
+            fig, ax = plt.subplots(figsize=(3, 3))
+            ax.pie(values, labels=labels, colors=colors, autopct='%1.0f%%')
+            st.pyplot(fig)
 
-                st.subheader("Confidence Scores")
-                st.write(confidence)
+            # =========================
+            # SHOW EVIDENCE
+            # =========================
+            st.markdown("### Top Evidence")
+            for r in results:
+                status = r.payload.get("status", "unknown")
+                link = r.payload.get("analysis_link", None)
+                score = round(1 - r.score, 3)
 
-                # ============================
-                # PLOT BAR CHART
-                # ============================
-                st.subheader("Confidence Distribution")
+                color = "#4CAF50" if status == "verified" else "#E74C3C"
 
-                labels = list(confidence.keys())
-                values = list(confidence.values())
+                st.markdown(f"**Status:** <span style='color:{color};'>{status}</span>", unsafe_allow_html=True)
+                st.markdown(f"**Similarity Score:** `{score}`")
 
-                fig, ax = plt.subplots(figsize=(4, 3))
-                ax.bar(labels, values)
-                ax.set_ylabel("Count")
-                ax.set_title("Evidence Confidence Counts")
-                st.pyplot(fig)
-
-                # ============================
-                # DISPLAY EVIDENCE
-                # ============================
-                st.subheader("Top Evidence Retrieved")
-
-                for p in evidence_points:
-                    st.write(f"**Claim:** {p.payload['text']}")
-                    st.write(f"- Status: `{p.payload['status']}`")
-                    if "analysis_link" in p.payload:
-                        st.write(f"- Source: {p.payload['analysis_link']}")
-                    st.write(f"- Similarity: `{p.score:.3f}`")
-                    st.markdown("---")
+                if link:
+                    st.markdown(f"🔗 **Proof:** [View Fact Check]({link})")
+                
+                st.markdown("---")
